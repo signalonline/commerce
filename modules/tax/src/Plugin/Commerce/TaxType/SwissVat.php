@@ -73,4 +73,36 @@ class SwissVat extends LocalTaxTypeBase {
     return $zones;
   }
 
+  /**
+   * {@inheritdoc}
+   */
+  public function isValidTaxNumberFormat(TaxNumber $tax_number, $country_code) {
+    // Exception for greece as they don't use their ISO country code.
+    $possible_country_codes = $this->getZonesCountryCodes();
+
+    // Only a possibly valid number if we are allowed to check against vies.
+    if ($tax_number->isValidFormat() && in_array($country_code, $possible_country_codes)) {
+
+      // The first two chars of eu vat numbers have to be the country code.
+      $tax_number_country_code = strtoupper(substr($tax_number->getTaxNumber(), 0, 2));
+      if (in_array($tax_number_country_code, $possible_country_codes)) {
+        return TRUE;
+      }
+    }
+
+    return FALSE;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function isValidTaxNumber(TaxNumber $tax_number, $country_code) {
+    // Check if tax number has valid format.
+    if ($this->isValidTaxNumberFormat($tax_number, $country_code)) {
+      return TRUE;
+    }
+
+    return FALSE;
+  }
+
 }

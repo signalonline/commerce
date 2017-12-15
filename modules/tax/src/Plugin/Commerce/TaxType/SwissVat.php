@@ -5,6 +5,9 @@ namespace Drupal\commerce_tax\Plugin\Commerce\TaxType;
 use Drupal\commerce_tax\TaxZone;
 use Drupal\Core\Form\FormStateInterface;
 use Drupal\commerce_tax\TaxNumber;
+use Drupal\commerce_order\Entity\OrderItemInterface;
+use Drupal\profile\Entity\ProfileInterface;
+use Drupal\commerce_tax\TaxableType;
 
 /**
  * Provides the Swiss VAT tax type.
@@ -26,6 +29,83 @@ class SwissVat extends LocalTaxTypeBase {
     $form['rates']['#markup'] = $this->t('The following VAT rates are provided:');
 
     return $form;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  protected function resolveZones(OrderItemInterface $order_item, ProfileInterface $customer_profile) {
+    $resolved_zones = parent::resolveZones($order_item, $customer_profile);
+
+    $customer_address = $customer_profile->address->first();
+    $customer_country = $customer_address->getCountryCode();
+
+    if (empty($resolved_zones)) {
+      return [];
+    }
+
+    $taxable_type = $this->getTaxableType($order_item);
+    $is_event = $taxable_type == TaxableType::EVENTS;
+
+    $product = $order_item->getPurchasedEntity()->getProduct();
+    $product_type = $this->entityTypeManager->getStorage('commerce_product_type')->load($product->bundle());
+
+    // If a tax registration in CH is available, external events (and other
+    // services which are not handled here are) in the EU are handled like
+    // EU countries. We will have to exclude swiss taxation in this case.
+    // @todo: Reuse the matching EU policy.
+    if ($is_event) {
+      // Set zones based on event.
+      if ($property_path = $product_type->getThirdPartySetting('commerce_tax', 'event_tax_address_property_path')) {
+        $property_path_parts = explode('|', $property_path);
+
+        $event_address = NULL;
+
+        // If field is directly on the product entity.
+        if (count($property_path_parts) == 1) {
+          $event_address = $product->$property_path_parts[0]->first();
+        }
+        // If field is on referenced entity we will use our poor-mans
+        // property path.
+        else {
+          $current_element = $product;
+
+          for ($i = 0; $i < count($property_path_parts); $i++) {
+            $field_name = $property_path_parts[$i];
+
+            if ($current_element->$field_name && !$current_element->$field_name->isEmpty()) {
+              // If its not the last element it is an entity reference.
+              if ($i != count($property_path_parts) - 1) {
+                $current_element = $current_element->$field_name->entity;
+              }
+              // Last element is the address field.
+              else {
+                $event_address = $current_element->$field_name->first();
+              }
+            }
+            else {
+              break;
+            }
+          }
+        }
+
+        // If we found an event address use this as the tax origin.
+        if ($event_address) {
+          $event_country = $event_address->getCountryCode();
+
+          // This is handled by the EuropeanUnionVat, exclude from Swiss Vat.
+          // @todo: This should not be added by the EuropeanUnionVat, but this
+          // class based on the underlying policy of the EuropeanUnionVat.
+          // we need more granular mapping of policies.
+          // @todo: $event_country would have to be limited to the EU.
+          if ($customer_country != $event_country) {
+            $resolved_zones = [];
+          }
+        }
+      }
+    }
+
+    return $resolved_zones;
   }
 
   /**

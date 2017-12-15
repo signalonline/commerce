@@ -54,7 +54,20 @@ class SwissVat extends LocalTaxTypeBase {
     // services which are not handled here are) in the EU are handled like
     // EU countries. We will have to exclude swiss taxation in this case.
     // @todo: Reuse the matching EU policy.
-    if ($is_event) {
+    if (!$is_event) {
+      $order = $order_item->getOrder();
+      $store = $order->getStore();
+      $store_address = $store->getAddress();
+      $store_country = $store_address->getCountryCode();
+
+      // Products from stores outside switzerland should not be taxed.
+      // This is handled by the eu tax rules in this case.
+      if ($customer_country != $store_country) {
+        // Intra-community supply (B2B) for non-events.
+        $resolved_zones = [];
+      }
+    }
+    else {
       // Set zones based on event.
       if ($property_path = $product_type->getThirdPartySetting('commerce_tax', 'event_tax_address_property_path')) {
         $property_path_parts = explode('|', $property_path);
@@ -102,6 +115,12 @@ class SwissVat extends LocalTaxTypeBase {
             $resolved_zones = [];
           }
         }
+        else {
+          $resolved_zones = [];
+        }
+      }
+      else {
+        $resolved_zones = [];
       }
     }
 

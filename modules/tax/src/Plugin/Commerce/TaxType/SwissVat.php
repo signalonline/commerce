@@ -4,6 +4,7 @@ namespace Drupal\commerce_tax\Plugin\Commerce\TaxType;
 
 use Drupal\commerce_tax\TaxZone;
 use Drupal\Core\Form\FormStateInterface;
+use Drupal\commerce_tax\TaxNumber;
 
 /**
  * Provides the Swiss VAT tax type.
